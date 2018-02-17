@@ -13,3 +13,5 @@ ansible/server-ca-config.json
 ansible/svc-cat-ca.json
 
 .vscode
+
+my_aos_inventory*

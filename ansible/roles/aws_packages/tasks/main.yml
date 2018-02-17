@@ -1,3 +1,6 @@
 ---
   - include: minimal.yml
-    when: ec2_type == "minimal"
+    when: minimal
+
+  - include: multi_node.yml
+    when: multi_node

@@ -1,0 +1,62 @@
+#
+# We are looking up the ec2 facts and storing them in a host variable
+# so a later play can retrieve the data.
+#
+- hosts: tag_Name_{{ instance_lookup_value }}
+  gather_facts: False
+  roles:
+    - { role: awsservicebroker_prep, when: deploy_awsservicebroker == True}
+
+- name: Create AWS Multi-Node Infrastructure
+  hosts: localhost
+  gather_facts: True
+  pre_tasks:
+    - include: aws_pretasks.yml
+  roles:
+    - aws_infrastructure
+  tasks:
+    - name: Get EC2 Remote Facts
+      ec2_remote_facts:
+        filters:
+          instance-state-name: running
+          "tag:Name": "*{{ aws_custom_prefix }}*"
+        region: "{{ aws_region }}"
+      register: my_ec2_facts
+    - name: Add EC2 Instances to the host group "launched_ec2"
+      add_host:
+        hostname: "{{ item.public_dns_name }}"
+        groupname: launched_ec2
+      with_items: "{{ my_ec2_facts.instances }}"
+      when: my_ec2_facts.instances
+
+- name: Configure Environment for the Multi-Node EC2 Instances
+  hosts: launched_ec2
+  remote_user: "{{ 'centos' if use_centos else 'ec2-user' }}"
+  become: True
+  gather_facts: True
+  pre_tasks:
+    - include: aws_pretasks.yml
+  roles:
+    - aws_ebs_volumes
+    - aws_repo_setup
+    - aws_packages
+    - aws_docker_setup
+    - env_hacks
+
+- name: Display AWS EC2 Infrastructure Information
+  hosts: localhost
+  gather_facts: True
+  pre_tasks:
+    - include: aws_pretasks.yml
+  vars:
+    - ec2_instance_info: []
+  roles:
+    - aws_display_info
+  tasks:
+    - set_fact:
+        msg: |
+            Next Steps:
+              RUN the OpenShift-Ansible Installer via the following command:
+              INVENTORY_FILE={{ openshift_ansible_inventory_path }} ./run_openshift_ansible.sh
+    - debug:
+        msg: "{{ msg.split('\n') }}"

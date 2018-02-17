@@ -1,3 +1,2 @@
 ---
-  - include: minimal.yml
-    when: ec2_type == "minimal"
+- include: "{{ 'minimal.yml' if minimal else 'multi_node.yml' }}"

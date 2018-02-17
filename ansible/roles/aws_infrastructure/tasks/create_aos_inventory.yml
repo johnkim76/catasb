@@ -1,0 +1,39 @@
+---
+  - fail:
+      msg: "master_public_dns_name is NOT valid!"
+    when: ( (master_public_dns_name is not defined) or (master_public_dns_name == "") )
+
+  - fail:
+      msg: "all_nodes is NOT valid!"
+    when: ( (all_nodes is not defined) or (all_nodes == "") )
+
+  - set_fact:
+      disablecheck_list: "disk_availability,docker_storage,memory_availability,package_version"
+
+  - set_fact:
+      inventory_template_file: "openshift_ansible_inventory_origin.j2"
+      disablecheck_list: "disk_availability,docker_storage,memory_availability,package_version,package_availability,docker_image_availability"
+      additional_registries: "docker.io"
+      insecure_registries: "['{{ master_portal_net }}', 'docker.io']"
+    when: deploy_origin
+
+  - set_fact:
+      broker_registry_url: "https://registry.access.redhat.com"
+      broker_registry_type: "rhcc"
+      broker_registry_name: "rh"
+      broker_image_prefix: "registry.access.redhat.com/openshift3/ose-"
+      broker_tag: "latest"
+      broker_etcd_image_prefix: "registry.access.redhat.com/rhel7/"
+      broker_etcd_image_tag: "latest"
+    when: not deploy_origin
+
+  - name: Remove existing inventory file '{{ openshift_ansible_inventory_path }}' if it exists
+    file:
+      path: "{{ openshift_ansible_inventory_path }}"
+      state: absent
+
+  - name: Create OpenShift-Ansible Inventory file from '{{ inventory_template_file }}' template.
+    template:
+      src: "{{ inventory_template_file }}"
+      dest: "{{ openshift_ansible_inventory_path }}"
+      mode: 0644

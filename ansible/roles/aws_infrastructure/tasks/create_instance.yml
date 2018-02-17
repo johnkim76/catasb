@@ -1,0 +1,230 @@
+---
+  - name:  Create EC2 instance for OpenShift with unrestricted network egress - '{{ host_fqdn }}'
+    ec2:
+      key_name: "{{ ssh_key_name }}"
+      instance_type: "{{ instance_type }}"
+      instance_tags:
+        Name: "{{ ec2_instance_name }}"
+        kubernetes.io/cluster/mycluster: '{{ kubernetes_cluster_tag_value }}'
+      image: "{{ aws_ami_id }}"
+      wait: yes
+      exact_count: 1
+      count_tag:
+        Name: "{{ ec2_instance_name }}"
+      group_id:
+        - "{{ my_sec_group.group_id }}"
+        - "{{ sec_group_egress_allow.group_id }}"
+      vpc_subnet_id: "{{ public_subnet_a_id }}"
+      assign_public_ip: yes
+      region: "{{ aws_region }}"
+    register: instance_result
+    when: not ec2_use_proxy and cluster == 'openshift'
+
+  - set_fact:
+      my_ec2_instance: "{{ instance_result }}"
+    when: not ec2_use_proxy and cluster == 'openshift'
+
+  - name:  Create EC2 instance for OpenShift with network egress restricted to VPC - '{{ host_fqdn }}'
+    ec2:
+      key_name: "{{ ssh_key_name }}"
+      instance_type: "{{ instance_type }}"
+      instance_tags:
+        Name: "{{ ec2_instance_name }}"
+      image: "{{ aws_ami_id }}"
+      wait: yes
+      exact_count: 1
+      count_tag:
+        Name: "{{ ec2_instance_name }}"
+      group_id:
+        - "{{ my_sec_group.group_id }}"
+      vpc_subnet_id: "{{ public_subnet_a_id }}"
+      assign_public_ip: yes
+      region: "{{ aws_region }}"
+    register: proxied_instance_result
+    when: ec2_use_proxy
+
+  - set_fact:
+      my_ec2_instance: "{{ proxied_instance_result }}"
+    when: ec2_use_proxy and cluster == 'openshift'
+
+  - name:  Create EC2 instance for Kubernetes with unrestricted network egress
+    ec2:
+      key_name: "{{ ssh_key_name }}"
+      instance_type: "{{ instance_type }}"
+      instance_tags:
+        Name: "{{ instance_name }}"
+      image: "{{ aws_ami_id }}"
+      wait: yes
+      exact_count: 1
+      count_tag:
+        Name: "{{ instance_name }}"
+      group_id:
+        - "{{ my_k8s_sec_group.group_id }}"
+        - "{{ sec_group_egress_allow.group_id }}"
+      vpc_subnet_id: "{{ public_subnet_a_id }}"
+      assign_public_ip: yes
+      region: "{{ aws_region }}"
+    register: k8s_unrestricted_instance_result
+    when: not ec2_use_proxy and cluster == 'kubernetes'
+
+  - set_fact:
+      my_ec2_instances: "{{ k8s_unrestricted_instance_result }}"
+    when: not ec2_use_proxy and cluster == 'kubernetes'
+
+  - name:  Create EC2 instance for Kubernetes with network egress restricted to VPC
+    ec2:
+      key_name: "{{ ssh_key_name }}"
+      instance_type: "{{ instance_type }}"
+      instance_tags:
+        Name: "{{ instance_name }}"
+      image: "{{ aws_ami_id }}"
+      wait: yes
+      exact_count: 1
+      count_tag:
+        Name: "{{ instance_name }}"
+      group_id:
+        - "{{ my_k8s_sec_group.group_id }}"
+      vpc_subnet_id: "{{ public_subnet_a_id }}"
+      assign_public_ip: yes
+      region: "{{ aws_region }}"
+    register: k8s_restricted_instance_result
+    when: ec2_use_proxy and cluster == 'kubernetes'
+
+  - set_fact:
+      my_ec2_instances: "{{ k8s_restricted_instance_result }}"
+    when: ec2_use_proxy and cluster == 'kubernetes'
+
+  - set_fact:
+      ec2_instances_id: "{{ item.id }}"
+      ec2_instances_public_dns_name: "{{ item.public_dns_name }}"
+      ec2_instances_private_dns_name: "{{ item.private_dns_name }}"
+    with_items: "{{ my_ec2_instance.tagged_instances }}"
+
+  - debug: var=ec2_instances_id
+  - debug: var=ec2_instances_public_dns_name
+  - debug: var=ec2_instances_private_dns_name
+
+  - name: Wait for SSH to come up on '{{ host_fqdn }}/{{ ec2_instances_public_dns_name }}'
+    wait_for:
+      host: "{{ ec2_instances_public_dns_name }}"
+      port: 22
+      delay: 0
+      timeout: 320
+      state: started
+
+  - name: Create EBS volumes for /tmp, docker_vg, /var/lib/docker, persistedvolumes
+    async: 200
+    register: ebs_volume_creations
+    poll: 0
+    ec2_vol:
+      instance: "{{ ec2_instances_id }}"
+      volume_size: "{{ device_item.volume_size }}"
+      region: "{{ aws_region }}"
+      device_name: "{{ device_item.device_name }}"
+      delete_on_termination: yes
+      tags:
+        Name: "{{ device_item.device_name }}"
+        kubernetes.io/cluster/mycluster: '{{ kubernetes_cluster_tag_value }}'
+    with_items:
+      - { device_name: '{{ tmp_ebs_device_name }}', volume_size: 50 }
+      - { device_name: '{{ docker_vg_ebs_device_name }}', volume_size: 250 }
+      - { device_name: '{{ var_lib_docker_ebs_device_name }}', volume_size: 100 }
+      - { device_name: '{{ persistent_vol_ebs_device_name }}', volume_size: 100 }
+    loop_control:
+      loop_var: device_item
+
+  - name: Wait for EBS volumes to finish creating
+    async_status: jid={{ volume_item.ansible_job_id }}
+    register: result
+    until: result.finished
+    retries: 10
+    delay: 10
+    with_items: '{{ ebs_volume_creations.results }}'
+    loop_control:
+      loop_var: volume_item
+
+  # Associate EIP for minimal setup only
+  - name: Associate Elastic IP - '{{ host_fqdn }}'
+    ec2_eip:
+      device_id: "{{ ec2_instances_id }}"
+      region: "{{ aws_region }}"
+      in_vpc: yes
+      reuse_existing_ip_allowed: yes
+    register: my_eip
+    when: minimal
+
+  # Set A-type DNS record for the minimal EC2 host
+  - name: Set DNS Record '{{ host_fqdn }}' for New Instance to Elastic IP {{ my_eip.public_ip }}
+    route53: >
+      command=create
+      zone="{{ target_dns_zone }}"
+      record="{{ host_fqdn }}"
+      type=A
+      ttl=60
+      overwrite=yes
+      value="{{ my_eip.public_ip }}"
+    when: minimal
+
+  # Set the wildcard A-type DNS record for the minimal EC2 Setup
+  - name: Set DNS Record '{{ wildcard_entry }}' to Elastic IP {{ my_eip.public_ip }}
+    route53: >
+      command=create
+      zone="{{ target_dns_zone }}"
+      record="{{ wildcard_entry }}"
+      type=A
+      ttl=60
+      overwrite=yes
+      value="{{ my_eip.public_ip }}"
+    when: minimal
+
+  # Set CNAME-type DNS record for the multi-node EC2 host
+  - name: Set DNS CNAME Record '{{ host_fqdn }}' for "{{  ec2_instances_public_dns_name }}"
+    route53: >
+      command=create
+      zone="{{ target_dns_zone }}"
+      record="{{ host_fqdn }}"
+      type=CNAME
+      ttl=60
+      overwrite=yes
+      value="{{ ec2_instances_public_dns_name }}"
+    when: multi_node
+
+  # Set the wildcard CNAME-type DNS record for the multi-node EC2 Setup
+  - name: Set DNS CNAME Record for the WildCard '{{ wildcard_entry }}' for "{{  ec2_instances_public_dns_name }}"
+    route53: >
+      command=create
+      zone="{{ target_dns_zone }}"
+      record="{{ wildcard_entry }}"
+      type=CNAME
+      ttl=60
+      overwrite=yes
+      value="{{ ec2_instances_public_dns_name }}"
+    when: ( (multi_node) and ('master' in ec2_instance_name) )
+
+  # Setting as a fact so we can read it later out of this role
+  - set_fact:
+      ec2_instances:  "{{ my_ec2_instance }}"
+      elastic_ip:     "{{ my_eip }}"
+    when: minimal
+
+  #
+  # OpenShift-Ansible inventory file Prep
+  #
+
+  # Set Fact 'master_route53_name' (for OpenShift Ansible Inventory Template)
+  - set_fact:
+      master_route53_name: "{{ host_fqdn }}"
+    when: ('master' in ec2_instance_name)
+
+  # Set Fact 'master_public_dns_name' (for OpenShift Ansible Inventory Template)
+  - set_fact:
+      master_public_dns_name: "{{ ec2_instances_public_dns_name }}"
+    when: ('master' in ec2_instance_name)
+
+  - set_fact:
+      all_nodes: "{{ all_nodes }}\n{{ ec2_instances_public_dns_name }} openshift_hostname={{ ec2_instances_private_dns_name }} openshift_public_hostname={{ host_fqdn }} {{ master_labels }}\n"
+    when: ('master' in ec2_instance_name)
+
+  - set_fact:
+      all_nodes: "{{ all_nodes }}\n{{ ec2_instances_public_dns_name }} openshift_hostname={{ ec2_instances_private_dns_name }} openshift_public_hostname={{ host_fqdn }} {{ node_labels }}\n"
+    when: ('master' not in ec2_instance_name)

@@ -1,0 +1,84 @@
+---
+- name: Check that 'aws_custom_prefix' is defined and not empty
+  fail:
+    msg: "Missing or empty variable 'aws_custom_prefix'"
+  when: (aws_custom_prefix is undefined) or
+        (aws_custom_prefix is none) or
+        (aws_custom_prefix | trim == '')
+
+- name: Check that instance_name is defined and not empty
+  fail:
+    msg: "Missing or empty variable 'instance_name'"
+  when: (instance_name is undefined) or
+        (instance_name is none) or
+        (instance_name | trim == '')
+
+- name: Check that ec2_type is defined and not empty
+  fail:
+    msg: "Missing or empty variable 'ec2_type'"
+  when: (ec2_type is undefined) or
+        (ec2_type is none) or
+        (ec2_type | trim == '')
+
+- set_fact:
+    wildcard_entry: "*.{{ aws_domain_name }}"
+
+# Single node (minimal) configuration
+- set_fact:
+    minimal: true
+    multi_node: false
+    host_fqdn: "{{ hostname }}"
+    unique_aws_network: false
+    enable_epel_repo: true
+    enable_rh_cdn_repo: false
+  when: ec2_type == "minimal"
+
+# Multi-node configuration
+- block:
+    - name: Check if 'num_ose_nodes' is 2 or greater
+      fail:
+        msg: "'num_ose_nodes' is '{{ num_ose_nodes }}'. It must be 2 or greater in the multi_node environment!"
+      when: (num_ose_nodes < 2)
+
+    - name: Check that 'centos_ami_id' is defined and not empty if 'use_centos' is true
+      fail:
+        msg: "Missing or empty variable 'centos_ami_id' for CentOS multi-node Origin deployment!"
+      when: use_centos and ( (centos_ami_id is undefined) or (centos_ami_id | trim == '') )
+
+    - name: Check if the RHN credentials are set if deploying a multi-node OCP environment
+      fail:
+        msg: "RHN credentials are invalid! Set correct values for 'rhn_user' and 'rhn_passwd'"
+      when: (not use_centos) and
+            (rhn_user == 'changeme') and
+            (rhn_passwd == 'changeme')
+
+    - set_fact:
+        minimal: false
+        multi_node: true
+        aws_sec_group_name: "{{ aws_custom_prefix }}_sg"
+        ec2_use_proxy: false  # currently not supporting proxy setup while in multi-node env
+
+    # If 'unique_aws_network' is true, then create new/unique VPC
+    # and related services instead of using the shared/pre-existing
+    # services with the 'aws_tag_prefix' prefixed names
+    - set_fact:
+        aws_tag_prefix: "{{ aws_custom_prefix }}"
+      when: unique_aws_network
+
+    # Origin - multi-node
+    - set_fact:
+        enable_epel_repo: true
+        enable_rh_cdn_repo: false
+      when: deploy_origin
+
+    - set_fact:
+        aws_ami_id: "{{ centos_ami_id }}"
+        aws_username: "centos"
+      when: use_centos and deploy_origin
+
+    # OCP - multi-node
+    - set_fact:
+        enable_epel_repo: false
+        enable_rh_cdn_repo: true
+      when: not deploy_origin
+  when: ec2_type == "multi_node"

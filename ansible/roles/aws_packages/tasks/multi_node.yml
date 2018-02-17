@@ -1,0 +1,66 @@
+---
+  - name: Install packages for AWS Multi-Node OpenShift Infrastructure
+    yum:
+      name: "{{ item }}"
+      state: present
+    with_items:
+      - wget
+      - git
+      - net-tools
+      - bind-utils
+      - iptables-services
+      - bridge-utils
+      - bash-completion
+      - kexec-tools
+      - sos
+      - psacct
+
+  - name: Yum Update
+    yum:
+      name: '*'
+      state: latest
+
+  - name: Install 'atomic' and 'docker-1.12.6' packages
+    yum:
+      name: "{{ item }}"
+      state: present
+    with_items:
+      - atomic
+      - docker-1.12.6
+
+  # https://docs.openshift.org/latest/install_config/install/host_preparation.html
+  - name: Origin Host Preparations
+    block:
+      - name: Install Additional the packages for Multi-Node Origin Environment
+        yum:
+          name: "{{ item }}"
+          state: present
+        with_items:
+          - NetworkManager
+          - ansible
+          - pyOpenSSL
+
+      - name: Enable and Start NetworkManager Service
+        systemd:
+          name: NetworkManager
+          enabled: yes
+          state: started
+
+      - name: Disable the EPEL repository globally
+        command: "/usr/bin/sed -i -e \"s/^enabled=1/enabled=0/\" /etc/yum.repos.d/epel.repo"
+    when: deploy_origin
+
+  # https://docs.openshift.com/container-platform/3.7/install_config/install/host_preparation.html
+  - name: OCP Host Preparations
+    block:
+      - name: Installing Additional Packages for Multi-Node OCP Environment
+        yum:
+          name: "{{ item }}"
+          state: present
+        with_items:
+          - atomic-openshift-utils
+          - atomic-openshift-excluder
+          - atomic-openshift-docker-excluder
+      - name: Run command 'atomic-openshift-excluder unexclude'
+        shell: atomic-openshift-excluder unexclude
+    when: enable_rh_cdn_repo

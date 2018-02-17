@@ -55,3 +55,4 @@
         src:  "{{ persistent_vol_block_device }}"
         fstype: ext4
         state: mounted
+      when: minimal

@@ -11,18 +11,6 @@
 
     - set_fact:
         msg: |
-            The cluster has been configured to connect through a squid proxy for outgoing connections.
-
-            Proxy Instance Public IP:  {{ proxy_ec2_facts.instances[0].public_ip_address }}
-            Proxy Instance ID:         {{ proxy_ec2_facts.instances[0].id }}
-            On VPC Proxy URL:          http://{{ proxy_ec2_facts.instances[0].private_ip_address }}:3128
-      when: ec2_use_proxy and my_ec2_facts.instances
-    - debug:
-        msg: "{{ msg.split('\n') }}"
-      when: ec2_use_proxy and my_ec2_facts.instances
-
-    - set_fact:
-        msg: |
             Hostname:                  {{ hostname }}
             OpenShift URL:             {{ cluster_url }}
             SSH Key Name:              {{ ssh_key_name }}
@@ -45,10 +33,32 @@
   when: my_ec2_facts.instances
 
 - block:
+    - name: Get EC2 Remote Facts for proxy instance
+      ec2_remote_facts:
+        filters:
+          instance-state-name: running
+          "tag:Name": "{{ proxy_instance_name }}"
+        region: "{{ aws_region }}"
+      register: proxy_ec2_facts
+
+    - set_fact:
+        msg: |
+              The cluster has been configured to connect through a squid proxy for outgoing connections.
+
+              Proxy Instance Public IP:  {{ proxy_ec2_facts.instances[0].public_ip_address }}
+              Proxy Instance ID:         {{ proxy_ec2_facts.instances[0].id }}
+              On VPC Proxy URL:          http://{{ proxy_ec2_facts.instances[0].private_ip_address }}:3128
+        when: proxy_ec2_facts.instances
+    - debug:
+        msg: "{{ msg.split('\n') }}"
+      when: proxy_ec2_facts.instances
+  when: ec2_use_proxy
+
+- block:
     - set_fact:
         msg: |
             No EC2 Instance Exists with the following attributes
-                EC2 Instance Tags: {{ instance_name }}
+                EC2 Instance Tags:  Name={{ instance_name }}
                 Hostname:           {{ hostname }}
                 Region:             {{ aws_region }}
             Next steps:

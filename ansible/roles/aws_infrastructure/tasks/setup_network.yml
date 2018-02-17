@@ -10,8 +10,7 @@
       region:           "{{ aws_region }}"
       state:            "{{ state }}"
       resource_tags:
-        Name:               "{{ vpc_name }}"
-        KubernetesCluster:  "{{ kubernetes_cluster_tag_value }}"
+        Name:           "{{ vpc_name }}"
     register: my_vpc
 
   - set_fact:
@@ -54,7 +53,6 @@
       state:            "{{ state }}"
 #     resource_tags:
 #       Name:              "{{ vpc_gateway_name }}"
-#       KubernetesCluster: "{{ kubernetes_cluster_tag_value }}"
 #
 # TODO: until Ansible v2.4 is released and fully supported,
 #       cannot use the 'resource_tags:'
@@ -67,8 +65,7 @@
       resource: "{{ my_vpc_igw.gateway_id }}"
       state:    "{{ state }}"
       tags:
-        Name:               "{{ vpc_gateway_name }}"
-        KubernetesCluster:  "{{ kubernetes_cluster_tag_value }}"
+        Name:   "{{ vpc_gateway_name }}"
     when: my_vpc_igw
 
   - set_fact:
@@ -77,16 +74,17 @@
 
   - name: Set up public subnet route table (for Subnet-A and Subnet-B)
     ec2_vpc_route_table:
-      vpc_id:           "{{ vpc_id }}"
-      region:           "{{ aws_region }}"
+      vpc_id: "{{ vpc_id }}"
+      region: "{{ aws_region }}"
       tags:
-        Name:           "{{ vpc_route_table_name }}"
+        Name: "{{ vpc_route_table_name }}"
       subnets:
         - "{{ public_subnet_a_id }}"
         - "{{ public_subnet_b_id }}"
       routes:
         - dest:         "0.0.0.0/0"
           gateway_id:   "{{ igw_id }}"
+      state:            "{{ state }}"
 
   #https://docs.openshift.com/container-platform/latest/install_config/install/prerequisites.html#required-ports
   - name:               Create OpenShift Security Group - "{{ aws_openshift_sec_group_name }}"
@@ -204,8 +202,17 @@
       state:    "{{ state }}"
       tags:
         Name: "{{ aws_openshift_sec_group_name }}"
-        KubernetesCluster: "{{ kubernetes_cluster_tag_value }}"
-    when: cluster == 'openshift' and my_sec_group
+    when: cluster == 'openshift' and my_sec_group and minimal
+
+  - name: Ensure the OpenShift security group '{{ aws_openshift_sec_group_name }}' is tagged
+    ec2_tag:
+      region:   "{{ aws_region }}"
+      resource: "{{ my_sec_group.group_id }}"
+      state:    "{{ state }}"
+      tags:
+        Name: "{{ aws_openshift_sec_group_name }}"
+        kubernetes.io/cluster/mycluster: '{{ kubernetes_cluster_tag_value }}'
+    when: cluster == 'openshift' and my_sec_group and multi_node
 
     # https://kubernetes.io/docs/setup/independent/install-kubeadm/#check-required-ports
   - name:               Create Kubernetes Security Group - "{{ aws_k8s_sec_group_name }}"
@@ -271,7 +278,6 @@
       state:    "{{ state }}"
       tags:
         Name: "{{ aws_k8s_sec_group_name }}"
-        KubernetesCluster: "{{ kubernetes_cluster_tag_value }}"
     when: cluster == "kubernetes" and my_k8s_sec_group
 
   - name: Create security group allowing direct connection to the internet
@@ -295,5 +301,21 @@
       state:    "{{ state }}"
       tags:
         Name: "{{ aws_egress_allow_sec_group_name }}"
-        KubernetesCluster: "{{ kubernetes_cluster_tag_value }}"
-    when: not ec2_use_proxy
+    when: not ec2_use_proxy and minimal
+
+  - name: Ensure the security group '{{ aws_egress_allow_sec_group_name }}' is tagged
+    ec2_tag:
+      region:   "{{ aws_region }}"
+      resource: "{{ sec_group_egress_allow.group_id }}"
+      state:    "{{ state }}"
+      tags:
+        Name: "{{ aws_egress_allow_sec_group_name }}"
+        kubernetes.io/cluster/mycluster: '{{ kubernetes_cluster_tag_value }}'
+    when: not ec2_use_proxy and multi_node
+
+  - debug: var=vpc_id
+  - debug: var=public_subnet_a_id
+  - debug: var=public_subnet_b_id
+  - debug: var=igw_id
+  - debug: var=my_sec_group.group_id
+  - debug: var=sec_group_egress_allow.group_id

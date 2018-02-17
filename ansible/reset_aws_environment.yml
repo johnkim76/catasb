@@ -11,6 +11,7 @@
 - hosts: localhost
   gather_facts: True
   tasks:
+    - include: aws_pretasks.yml
     - name: EC2 proxy remote facts
       ec2_remote_facts:
         filters:
@@ -19,7 +20,6 @@
         region: "{{ aws_region }}"
       register: proxy_ec2_facts
       when: ec2_use_proxy
-
     - name: Record squid proxy IP addresses
       set_fact:
         proxy_public_ip: "{{ proxy_ec2_facts.instances[0].public_ip_address }}"
@@ -37,9 +37,11 @@
         region: "{{ aws_region }}"
       register: my_ec2_facts
 
-- hosts: tag_Name_{{ instance_lookup_value }}
+- name: Configure Environment for the EC2 Instance
+  hosts: tag_Name_{{ instance_lookup_value }}
   gather_facts: True
   pre_tasks:
+    - include: aws_pretasks.yml
     - name: Setting fact of security group id
       set_fact:
         my_security_group_id: "{{ hostvars.localhost.my_ec2_facts.instances[0].groups[0].id }}"

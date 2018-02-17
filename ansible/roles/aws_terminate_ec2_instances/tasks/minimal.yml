@@ -1,8 +1,4 @@
 ---
-- set_fact:
-    host_fqdn: "{{ aws_custom_prefix }}.{{ target_dns_zone }}"
-    wildcard_entry: "*.{{ aws_custom_prefix }}.{{ target_dns_zone }}"
-
 - name: Attempt removal of DNS A Record '{{ host_fqdn }}'
   route53: >
     command=delete
@@ -40,16 +36,16 @@
 - debug:
     msg:
       -  "Deleted Instance."
-      -  "EC2 Instance Tags:        Name={{ item.tags.Name }}"
-      -  "EC2 Instance ID:          {{ item.id }}"
-      -  "Region:                    {{ aws_region }}"
+      -  "EC2 Instance Tags:    Name={{ item.tags.Name }}"
+      -  "EC2 Instance ID:      {{ item.id }}"
+      -  "Region:               {{ aws_region }}"
   with_items: "{{ my_ec2_facts.instances }}"
   when: my_ec2_facts.instances
 
 - debug:
     msg:
-      -  "Removed Route53 DNS:       {{ wildcard_entry }}"
-      -  "                           {{ host_fqdn }}"
+      -  "Removed Route53 DNS:  {{ wildcard_entry }}"
+      -  "                      {{ host_fqdn }}"
       -  ""
       -  "NOTE:"
       -  "  Only the EC2 Instances and DNS entries listed above have been removed."

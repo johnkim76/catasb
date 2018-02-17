@@ -1,12 +1,47 @@
 ---
-  # Create minimal AWS network components
-  - include: minimal_network.yml
-    when: ec2_type == "minimal"
+  - name: Create network components
+    include: setup_network.yml
 
-  # Create proxy infrastructure
-  - include: proxy.yml
+  - name: Create proxy infrastructure
+    include: proxy.yml
     when: ec2_use_proxy
 
   # Create a single instance for the minimal (single node) cluster
-  - include: minimal_instance.yml
-    when: ec2_type == "minimal"
+  - include: create_instance.yml
+    vars:
+      - ec2_instance_name: "{{ instance_name }}"
+    when: minimal
+
+  #
+  # Create instances for the multi-node cluster
+  #
+
+  # Prepare the list of OpenShift master-node hostname
+  - set_fact:
+      master_node_hostname: "master"
+    when: multi_node
+
+  # Prepare the list of OpenShift Node hostnames
+  - set_fact:
+      ose_node_hostname_list: "{{ ose_node_hostname_list }} + ['node{{ item }}']"
+    when: multi_node
+    with_sequence: start=1 end={{ num_ose_nodes }}
+
+  # Prepare the list of ALL OpenShift hosts (both master & nodes)
+  - set_fact:
+      all_ose_nodes: "['{{ master_node_hostname }}'] + {{ ose_node_hostname_list }}"
+    when: multi_node
+
+  - name: Create the instances for all OSE hosts
+    include: create_instance.yml
+    vars:
+      - ec2_instance_name: "{{ owners_name }}_{{ ec2_item.1 }}_{{ aws_custom_prefix }}_{{ target_dns_zone }}"
+      - host_fqdn: "{{ ec2_item.1 }}.{{ aws_domain_name }}"
+    when: multi_node
+    with_indexed_items: "{{ all_ose_nodes }}"
+    loop_control:
+      loop_var: ec2_item
+
+  - name: Create OpenShift-Ansible Inventory File
+    include: create_aos_inventory.yml
+    when: multi_node

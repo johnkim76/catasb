@@ -1,0 +1,17 @@
+---
+- name: Set the hostname to - "{{ inventory_hostname }}"
+  hostname:
+    name: "{{ inventory_hostname }}"
+
+- name: add docker group
+  group:
+    name: docker
+    state: present
+  when: deploy_origin
+
+- name: add '{{ aws_username }}' user to 'docker' group
+  user:
+    name: "{{ aws_username }}"
+    group: docker
+    append: yes
+  when: deploy_origin

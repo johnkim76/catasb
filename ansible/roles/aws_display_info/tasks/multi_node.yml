@@ -1,0 +1,103 @@
+---
+- name: Get EC2 Group Facts
+  ec2_group_facts:
+    filters:
+      "tag:Name": "{{ aws_custom_prefix }}_*"
+    region: "{{ aws_region }}"
+  register: my_group_facts
+
+- name: Get EC2 Route Table Facts
+  ec2_vpc_route_table_facts:
+    filters:
+      "tag:Name": "{{ aws_tag_prefix }}_*"
+    region: "{{ aws_region }}"
+  register: my_vpc_route_table_facts
+
+- name: Get EC2 Internet Gateway (IGW) Facts
+  ec2_vpc_igw_facts:
+    filters:
+      "tag:Name": "{{ aws_tag_prefix }}_*"
+    region: "{{ aws_region }}"
+  register: my_vpc_igw_facts
+
+- name: Get EC2 Subnet Facts
+  ec2_vpc_subnet_facts:
+    filters:
+      "tag:Name": "{{ aws_tag_prefix }}_*"
+    region: "{{ aws_region }}"
+  register: my_vpc_subnet_facts
+
+- name: Settings facts of ec2 instance
+  set_fact:
+    ec2_instance_info: "{{ ec2_instance_info }} + ['
+      id={{ item.id }}
+      {{ item.public_ip_address }}
+      (tagName={{ item.tags.Name }})
+      (public_dns_name={{ item.public_dns_name }})
+      (private_dns_name={{ item.private_dns_name }})
+      (placement_zone={{ item.placement.zone }})
+      ']"
+  with_items:
+    "{{ my_ec2_facts.instances }}"
+  when: my_ec2_facts.instances
+
+- set_fact:
+    msg: |
+        EC-2 SSH Key Name:   {{ ssh_key_name }}
+        EC-2 Region:         {{ aws_region }}
+        AWS Custom Prefix:   {{ aws_custom_prefix }}
+        AWS Tag Prefix:      {{ aws_tag_prefix }}
+
+        ##########################################
+        #  NO network Information was available! #
+        ##########################################
+- set_fact:
+    msg: |
+        EC-2 SSH Key Name:   {{ ssh_key_name }}
+        EC-2 Region:         {{ aws_region }}
+        AWS Custom Prefix:   {{ aws_custom_prefix }}
+        AWS Tag Prefix:      {{ aws_tag_prefix }}
+
+        The following are the Network Information for 'aws_custom_prefix={{ aws_custom_prefix }}':
+          Security Group
+            Name  : {{ my_group_facts.security_groups[0].group_name }}
+            ID    : {{ my_group_facts.security_groups[0].group_id }}
+            Name  : {{ my_group_facts.security_groups[1].group_name }}
+            ID    : {{ my_group_facts.security_groups[1].group_id }}
+          Route Table
+            Name  : {{ my_vpc_route_table_facts.route_tables[0].tags.Name }}
+            ID    : {{ my_vpc_route_table_facts.route_tables[0].id }}
+            VPC ID: {{ my_vpc_route_table_facts.route_tables[0].vpc_id }}
+          Internet Gateway (IGW)
+            Tags  : {{ my_vpc_igw_facts.internet_gateways[0].tags }}
+            ID    : {{ my_vpc_igw_facts.internet_gateways[0].internet_gateway_id }}
+          Subnets
+            Name  : {{ my_vpc_subnet_facts.subnets[0].tags.Name }}
+            ID    : {{ my_vpc_subnet_facts.subnets[0].id }}
+
+            Name  : {{ my_vpc_subnet_facts.subnets[1].tags.Name }}
+            ID    : {{ my_vpc_subnet_facts.subnets[1].id }}
+
+  when:
+    my_group_facts.security_groups|length > 0 and
+    my_vpc_route_table_facts.route_tables|length > 0 and
+    my_vpc_igw_facts.internet_gateways|length > 0 and
+    my_vpc_subnet_facts.subnets|length > 0
+- set_fact:
+    msg: "{{ msg }}
+
+      Wildcard DNS CNAME Record for host master.{{ aws_domain_name }}\n
+          *.{{ aws_domain_name }}"
+- stat:
+    path: "{{ openshift_ansible_inventory_path }}"
+  register: stat_result
+- set_fact:
+    msg: "{{ msg }}
+
+
+      OpenShift-Ansible Inventory File Path:\n
+          {{ openshift_ansible_inventory_path }}"
+  when: stat_result.stat.exists == True
+- debug:
+    msg: "{{ msg.split('\n') }}"
+- debug: var=ec2_instance_info

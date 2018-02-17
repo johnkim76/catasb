@@ -1,6 +1,9 @@
 ---
 - include: minimal.yml
-  when: ec2_type == "minimal"
+  when: minimal
 
 - include: proxy.yml
   when: ec2_use_proxy
+
+- include: multi_node.yml
+  when: multi_node

@@ -36,12 +36,14 @@
       region: "{{ aws_region }}"
     register: proxy_ec2_instance
 
-  - name: Record squid proxy IP addresses
+  - name: Record squid proxy instance ID and IP addresses
     set_fact:
-      proxy_public_ip: "{{ proxy_ec2_instance.tagged_instances[0].public_ip }}"
-      proxy_private_ip: "{{ proxy_ec2_instance.tagged_instances[0].private_ip }}"
+      proxy_ec2_instance_id: "{{ item.id }}"
+      proxy_public_ip: "{{ item.public_ip }}"
+      proxy_private_ip: "{{ item.private_ip }}"
+    with_items: "{{ proxy_ec2_instance.instances }}"
 
-  - name: Wait for SSH to come up on squid proxy instance {{ proxy_public_ip }}
+  - name: Wait for SSH to come up on squid proxy instance
     wait_for:
       host: "{{ proxy_public_ip }}"
       port: 22

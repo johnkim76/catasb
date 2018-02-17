@@ -56,22 +56,22 @@ dockerhub_org: ansibleplaybookbundle
 # Disable SSL.
 # use_ssl: false
 
-# Select AWS region and AMI for EC2 deployments.
+# Select AWS region and RHEL AMI for EC2 deployments.
 # us-east-1
 # aws_region: us-east-1
-# aws_ami_id: ami-26ebbc5c
+# aws_ami_id: ami-6871a115
 # us-east-2
 # aws_region: us-east-2
-# aws_ami_id: ami-0b1e356e
+# aws_ami_id: ami-03291866
 # us-west-1
 # aws_region: us-west-1
-# aws_ami_id: ami-77a2a317
+# aws_ami_id: ami-18726478
 # us-west-2
 # aws_region: us-west-2
-# aws_ami_id: ami-223f945a
+# aws_ami_id: ami-28e07e50
 # ca-central-1
 # aws_region: ca-central-1
-# aws_ami_id: ami-c1cb4ea5
+# aws_ami_id: ami-49f0762d
 
 
 # Enable 'ec2_use_proxy' to send cluster egress through a squid proxy. Only affects EC2 deployments.
@@ -101,3 +101,47 @@ dockerhub_org: ansibleplaybookbundle
 
 # AWS CloudFormation Role ARN Name
 # aws_role_arn_name: "aws-broker-cloudformation"
+
+#
+# EC2 Multi-Node
+#
+# Deployment Type:
+#   false : deploy 'openshift-enterprise' (default)
+#   true  : deploy 'origin'
+# deploy_origin: true
+
+# CentOS OS for Multi-Node Origin Env
+#
+# use_centos: true
+#
+# centos_ami_id: <aws-centos-ami-id-in-your-region>
+#                ami-46c1b650   # splice centos7 (x86_64) US East (N. Virginia)
+#                ami-18f8df7d   # splice centos7 (x86_64) US East (Ohio)
+
+
+# Create a unique AWS VPC and other related network service in the Multi-Node
+# Note:
+#   Unique Security Groups are created in Multi-node env with aws_custom_prefix
+#   due to the fact that security groups must be uniquely tagged per cluster created
+#   (https://github.com/openshift/openshift-docs/blob/master/install_config/configuring_aws.adoc#resources-that-need-tags)
+# unique_aws_network: false
+
+# Number of OSE nodes (minimum 2 required)
+# num_ose_nodes: 2
+
+# Cluster admin and dev user
+# cluster_privileged_user: admin
+# cluster_privileged_user_password: admin
+# cluster_dev_user: dev
+# cluster_dev_user_password: dev
+
+####################################################################
+#
+# needed ONLY if 'enable_rh_cdn_repo' is 'true'
+#
+# WARNING: password will be in plain text!
+#
+####################################################################
+# rhn_user: <user_name>
+# rhn_passwd: <passwd>
+# aos_pool_id: <pool id with OpenShift Container Platform subscription>

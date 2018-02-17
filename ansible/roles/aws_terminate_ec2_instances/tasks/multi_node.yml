@@ -1,0 +1,49 @@
+---
+- name:  Delete EC-2 Instance(s)
+  ec2:
+    state: absent
+    wait: yes
+    instance_ids:
+      - "{{ item.id }}"
+    region: "{{ aws_region }}"
+  with_items:
+    "{{ my_ec2_facts.instances }}"
+  when: my_ec2_facts.instances
+
+- name: Settings facts of ec2 instance
+  set_fact:
+    deleted_ec2_instance_info: "{{ deleted_ec2_instance_info }} + ['
+      {{ item.tags.Name }}
+      id={{ item.id }}
+      {{ item.public_dns_name }}
+      ']"
+  with_items:
+    "{{ my_ec2_facts.instances }}"
+  when: my_ec2_facts.instances
+
+- name: Get EC2 Group Facts
+  ec2_group_facts:
+    filters:
+      "tag:Name": "{{ aws_custom_prefix }}_*"
+    region: "{{ aws_region }}"
+  register: my_group_facts
+
+- name:  Remove Security Group
+  ec2_group:
+    group_id: "{{ item.group_id }}"
+    state: absent
+  with_items:
+    "{{ my_group_facts.security_groups }}"
+
+- debug: var=deleted_ec2_instance_info
+
+- set_fact:
+    msg: |
+        WARNING:
+          Only the EC2 Instances listed above have been 'terminated'.
+          Network items (i.e. VPC, GW, Subnets, etc.)
+          and Custom DNS entries created during the 'setup' step still remain.
+
+          Visit the AWS WebUI console and remove any other unwanted items manually.
+- debug:
+    msg: "{{ msg.split('\n') }}"

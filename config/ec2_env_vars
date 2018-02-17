@@ -18,11 +18,11 @@ export AWS_CUSTOM_PREFIX
 # We are introducing TAG_NAME to do this transform so we can
 # use TAG_NAME as a variable for the group lookup
 #####
-export INSTANCE_NAME="${OWNERS_NAME}-${AWS_CUSTOM_PREFIX}.${TARGET_DNS_ZONE}"
+export INSTANCE_NAME="${OWNERS_NAME}_${AWS_CUSTOM_PREFIX}_${TARGET_DNS_ZONE}"
 export INSTANCE_LOOKUP_VALUE=`echo ${INSTANCE_NAME//./_}`
 export INSTANCE_LOOKUP_VALUE=`echo ${INSTANCE_LOOKUP_VALUE//-/_}`
 
-export PROXY_INSTANCE_NAME="${OWNERS_NAME}-proxy-${AWS_CUSTOM_PREFIX}.${TARGET_DNS_ZONE}"
+export PROXY_INSTANCE_NAME="${OWNERS_NAME}_proxy_${AWS_CUSTOM_PREFIX}_${TARGET_DNS_ZONE}"
 export PROXY_INSTANCE_LOOKUP_VALUE=`echo ${PROXY_INSTANCE_NAME//./_}`
 export PROXY_INSTANCE_LOOKUP_VALUE=`echo ${PROXY_INSTANCE_LOOKUP_VALUE//-/_}`
 
@@ -30,7 +30,9 @@ export EC2_USER="ec2-user"
 
 export EXTRA_VARS="{\
 \"ssh_key_name\":\"${AWS_SSH_KEY_NAME}\", \
+\"ssh_key_path\":\"${AWS_SSH_PRIV_KEY_PATH}\", \
 \"target_dns_zone\":\"${TARGET_DNS_ZONE}\", \
+\"owners_name\":\"${OWNERS_NAME}\", \
 \"aws_custom_prefix\":\"${AWS_CUSTOM_PREFIX}\", \
 \"instance_name\":\"${INSTANCE_NAME}\", \
 \"instance_lookup_value\":\"${INSTANCE_LOOKUP_VALUE}\", \
