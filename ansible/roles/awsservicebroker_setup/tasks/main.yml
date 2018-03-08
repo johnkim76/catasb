@@ -212,19 +212,22 @@
       name: broker_proxy_setup
     when: ec2_use_proxy and ec2_install
 
-  - name: Waiting up to 5 minutes for ASB pod
+  - name: Waiting 10 minutes for ASB deployment configs
     action:
-      shell "{{ oc_cmd }}" get pods | grep -iEm1 "asb.*?running" | grep -v deploy | grep -v etcd
+      shell "{{ oc_cmd }}" get deploymentconfig "{{ item }}" -o go-template={% raw %}'{{if eq .spec.replicas .status.availableReplicas}}good{{end}}'{% endraw %} | grep 'good'
     register: wait_for_asb_pod
     until: wait_for_asb_pod.rc == 0
     retries: 60
-    delay: 5
+    delay: 10
+    with_items:
+      - aws-asb
+      - aws-asb-etcd
 
   - name: Get route for aws-service-broker
     shell: "'{{ oc_cmd }}' get routes | grep aws-service-broker | awk '{print $2}'"
     register: result_get_route_asb
-    retries: 12
-    delay: 5
+    retries: 6
+    delay: 10
 
   - set_fact:
       aws_access_key: "{{ lookup('env','AWS_ACCESS_KEY_ID') }}"
